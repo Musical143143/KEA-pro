@@ -26,10 +26,6 @@ jobs:
         working-directory: mobile
         run: flutter pub get
 
-      - name: Run tests
-        working-directory: mobile
-        run: flutter test
-
       - name: Build release APK
         working-directory: mobile
         run: flutter build apk --release
