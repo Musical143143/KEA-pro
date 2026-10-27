@@ -546,8 +546,15 @@ class _BookmarksPageState extends State<BookmarksPage>{
       if(rows.isEmpty)return const _ErrorCard(message:'No saved articles yet. Sign in and bookmark a current-affairs article.');
       return ListView.builder(itemCount:rows.length,itemBuilder:(context,i){
         final r=rows[i];final article=r['current_affairs_articles'] as Map<String,dynamic>?;
-        return ListTile(title:Text((widget.kn?article?['title_kn']:article?['title'])?.toString()??'Saved item'),
-          subtitle:Text((widget.kn?article?['summary_kn']:article?['summary_en'])?.toString()??''),
+        final title = article == null
+            ? 'Saved item'
+            : ((widget.kn ? article['title_kn'] : article['title'])?.toString() ?? 'Saved item');
+        final summary = article == null
+            ? ''
+            : ((widget.kn ? article['summary_kn'] : article['summary_en'])?.toString() ?? '');
+        return ListTile(
+          title: Text(title),
+          subtitle: Text(summary),
           trailing:IconButton(icon:const Icon(Icons.delete_outline),onPressed:()async{
             await Supabase.instance.client.from('user_bookmarks').delete().eq('id',r['id']);
             if(context.mounted)setState((){});
