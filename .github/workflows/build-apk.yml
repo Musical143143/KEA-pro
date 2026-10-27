@@ -28,6 +28,29 @@ jobs:
       - name: Prepare client configuration file
         working-directory: mobile
         run: cp lib/app_config.example.dart lib/app_config.dart
+      - name: Validate Supabase build configuration
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        shell: bash
+        run: |
+          if [[ -z "${SUPABASE_URL//[[:space:]]/}" ]]; then
+            echo "::error::Missing repository secret SUPABASE_URL"
+            exit 1
+          fi
+          if [[ ! "$SUPABASE_URL" =~ ^https://[A-Za-z0-9-]+\.supabase\.co/?$ ]]; then
+            echo "::error::SUPABASE_URL must be your actual Supabase HTTPS project URL"
+            exit 1
+          fi
+          if [[ -z "${SUPABASE_ANON_KEY//[[:space:]]/}" || "$SUPABASE_ANON_KEY" == *YOUR_SUPABASE* ]]; then
+            echo "::error::Missing or placeholder SUPABASE_ANON_KEY"
+            exit 1
+          fi
+          if [[ "$SUPABASE_ANON_KEY" == *service_role* ]]; then
+            echo "::error::Never use a service_role key in the client app"
+            exit 1
+          fi
+          echo "Supabase build configuration is present."
       - name: Install dependencies
         working-directory: mobile
         run: flutter pub get
