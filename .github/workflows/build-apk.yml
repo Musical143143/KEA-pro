@@ -21,6 +21,10 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Restore Android platform project
+        working-directory: mobile
+        run: flutter create --platforms=android --project-name kea_pro .
+
       - name: Prepare client configuration file
         working-directory: mobile
         run: cp lib/app_config.example.dart lib/app_config.dart
