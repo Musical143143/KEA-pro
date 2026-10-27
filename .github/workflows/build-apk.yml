@@ -1,40 +1,48 @@
 name: Build KEA Pro APK
-
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - 'supabase/**'
+      - '.github/workflows/build-apk.yml'
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
-
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-
-      - name: Generate Android platform files
+      - name: Prepare client configuration file
         working-directory: mobile
-        run: flutter create --platforms=android --project-name kea_pro .
-
+        run: cp lib/app_config.example.dart lib/app_config.dart
       - name: Install dependencies
         working-directory: mobile
         run: flutter pub get
-
+      - name: Analyze Dart source
+        working-directory: mobile
+        run: flutter analyze
+      - name: Run tests
+        working-directory: mobile
+        run: flutter test
       - name: Build release APK
         working-directory: mobile
-        run: flutter build apk --release
-
-      - name: Upload APK
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          flutter build apk --release \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
           name: KEA-Pro-APK

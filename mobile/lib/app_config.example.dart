@@ -1,7 +1,13 @@
-/// Copy this file to app_config.dart and enter your Supabase project values.
-/// The anon/publishable key is designed for client use with RLS enabled.
-/// NEVER place a service-role key in this file.
+/// Copy to app_config.dart for local builds, or let the GitHub Actions
+/// release workflow generate app_config.dart from repository secrets.
+/// Use only the Supabase project URL and publishable/anon key in this client.
 class AppConfig {
-  static const supabaseUrl = 'https://YOUR_PROJECT.supabase.co';
-  static const supabaseAnonKey = 'YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY';
+  static const String supabaseUrl = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: '',
+  );
+  static const String supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue: '',
+  );
 }

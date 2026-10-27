@@ -56,6 +56,25 @@ create index if not exists ca_search_idx on public.current_affairs_articles usin
   to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(summary_en,'') || ' ' || coalesce(body_excerpt,''))
 );
 
+create table if not exists public.study_materials (
+  id uuid primary key default gen_random_uuid(),
+  category_slug text not null check (category_slug in (
+    'polity','karnataka-history','geography','science-tech','environment','computer-knowledge'
+  )),
+  title_en text not null,
+  title_kn text,
+  content_en text not null,
+  content_kn text,
+  source_url text,
+  is_published boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (source_url is null or source_url ~ '^https?://')
+);
+create index if not exists study_materials_module_idx
+  on public.study_materials(category_slug, updated_at desc)
+  where is_published = true;
+
 create table if not exists public.questions (
   id uuid primary key default gen_random_uuid(),
   category_id uuid references public.categories(id) on delete set null,
@@ -219,7 +238,7 @@ on conflict (slug) do update set name_en=excluded.name_en,name_kn=excluded.name_
 -- RLS: public study content is readable only when published/approved.
 alter table public.profiles enable row level security;
 alter table public.categories enable row level security;
-alter table public.current_affairs_articles enable row level security;
+alter table public.current_affairs_articles enable row level security;\nalter table public.study_materials enable row level security;
 alter table public.questions enable row level security;
 alter table public.mock_tests enable row level security;
 alter table public.mock_test_questions enable row level security;
@@ -238,6 +257,9 @@ drop policy if exists "categories readable" on public.categories;
 create policy "categories readable" on public.categories for select to anon, authenticated using (true);
 drop policy if exists "approved articles readable" on public.current_affairs_articles;
 create policy "approved articles readable" on public.current_affairs_articles for select to anon, authenticated using (review_status = 'approved');
+drop policy if exists "published study materials readable" on public.study_materials;
+create policy "published study materials readable" on public.study_materials
+  for select to anon, authenticated using (is_published = true);
 drop policy if exists "published questions readable" on public.questions;
 create policy "published questions readable" on public.questions for select to anon, authenticated using (is_published = true);
 drop policy if exists "published tests readable" on public.mock_tests;

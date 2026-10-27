@@ -48,7 +48,9 @@ cd mobile
 flutter pub get
 ```
 
-Create `mobile/lib/app_config.dart` from the example and set your Supabase project URL and **anon/publishable key**. Never put the service-role key in the mobile app.
+For local builds, copy `mobile/lib/app_config.example.dart` to `mobile/lib/app_config.dart`. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` using `--dart-define` (or edit the local config file). Never put the service-role key in the mobile app.
+
+For GitHub Actions APK builds, add repository secrets named `SUPABASE_URL` and `SUPABASE_ANON_KEY`. The release workflow generates the required config import, runs analysis and tests, then uploads `KEA-Pro-APK`. If the secrets are absent, the app deliberately opens a configuration screen instead of issuing invalid relative `/rest/v1/...` requests.
 
 ```bash
 flutter run
@@ -88,3 +90,11 @@ AI output is an aid, not an official answer key. Editorial review is recommended
 - Add an exam-specific verified blueprint for every exam; do not assume a universal marking rule.
 - Add backup/restore drills, database migrations, privacy policy, account deletion, and monitoring.
 - Never store API keys in Flutter, client-side code, Git history, or a public repository.
+
+## 7. Continue development from this source ZIP
+- The Flutter app now validates that the Supabase URL is an absolute HTTPS URL with a host before initializing the client.
+- Light, dark, and system theme modes are available from the app-bar theme menu.
+- The four-tab shell uses `NavigationBar` and `IndexedStack`.
+- Study module cards open `ModuleDetailsScreen`, which fetches published rows from `study_materials`.
+- The SQL schema now includes `study_materials` and an RLS policy for published rows.
+- The News tab defaults to Karnataka. Current-affairs and quiz data still require the Supabase tables to be populated with reviewed content.

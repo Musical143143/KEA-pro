@@ -6,28 +6,44 @@ import 'app_config.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (AppConfig.supabaseUrl.contains('YOUR_PROJECT') ||
-      AppConfig.supabaseAnonKey.contains('YOUR_SUPABASE')) {
-    runApp(const KeaProApp(configured: false));
+  final rawUrl = AppConfig.supabaseUrl.trim();
+  final key = AppConfig.supabaseAnonKey.trim();
+  final parsed = Uri.tryParse(rawUrl);
+  final validUrl = parsed != null &&
+      parsed.isAbsolute &&
+      parsed.scheme.toLowerCase() == 'https' &&
+      parsed.host.isNotEmpty &&
+      parsed.userInfo.isEmpty &&
+      parsed.query.isEmpty &&
+      parsed.fragment.isEmpty &&
+      !parsed.host.contains('YOUR_PROJECT');
+  if (!validUrl || key.isEmpty || key.contains('YOUR_SUPABASE')) {
+    runApp(const KeaProApp(configured: false, configError: 'Supabase is not configured. Add the project HTTPS URL and publishable/anon key to the build environment, then rebuild.'));
     return;
   }
-  await Supabase.initialize(
-    url: AppConfig.supabaseUrl,
-    anonKey: AppConfig.supabaseAnonKey,
-    authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
-  );
-  runApp(const KeaProApp(configured: true));
+  try {
+    await Supabase.initialize(
+      url: parsed.toString().replaceFirst(RegExp(r'/+$'), ''),
+      anonKey: key,
+      authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
+    );
+    runApp(const KeaProApp(configured: true));
+  } catch (e) {
+    runApp(KeaProApp(configured: false, configError: 'Supabase configuration could not be initialized. Verify the project URL and publishable key. Details: $e'));
+  }
 }
 
 class KeaProApp extends StatefulWidget {
-  const KeaProApp({super.key, required this.configured});
+  const KeaProApp({super.key, required this.configured, this.configError});
   final bool configured;
+  final String? configError;
   @override
   State<KeaProApp> createState() => _KeaProAppState();
 }
 
 class _KeaProAppState extends State<KeaProApp> {
   bool kannada = false;
+  ThemeMode themeMode = ThemeMode.system;
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -36,15 +52,41 @@ class _KeaProAppState extends State<KeaProApp> {
       locale: kannada ? const Locale('kn') : const Locale('en'),
       supportedLocales: const [Locale('en'), Locale('kn')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      themeMode: themeMode,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF155EEF)),
-        scaffoldBackgroundColor: const Color(0xFFF5F7FB),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6750A4), brightness: Brightness.light),
+        scaffoldBackgroundColor: const Color(0xFFF8F7FC),
         cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: const Color(0xFFF0EEF7),
+          indicatorColor: const Color(0xFFE4DFFF),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
+          )),
+        ),
+      ),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFD0BCFF), brightness: Brightness.dark),
+        scaffoldBackgroundColor: const Color(0xFF121218),
+        cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: const Color(0xFF1D1B24),
+          indicatorColor: const Color(0xFF49415F),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
+          )),
+        ),
       ),
       home: widget.configured
-          ? AppShell(kannada: kannada, onLanguageChanged: (v) => setState(() => kannada = v))
-          : const ConfigurationRequired(),
+          ? AppShell(
+              kannada: kannada,
+              onLanguageChanged: (v) => setState(() => kannada = v),
+              themeMode: themeMode,
+              onThemeModeChanged: (v) => setState(() => themeMode = v),
+            )
+          : ConfigurationRequired(message: widget.configError ?? 'Supabase configuration is missing.'),
     );
   }
 }
@@ -54,7 +96,8 @@ class T {
 }
 
 class ConfigurationRequired extends StatelessWidget {
-  const ConfigurationRequired({super.key});
+  const ConfigurationRequired({super.key, required this.message});
+  final String message;
   @override
   Widget build(BuildContext context) => Scaffold(
     body: Center(child: Padding(
@@ -64,17 +107,18 @@ class ConfigurationRequired extends StatelessWidget {
         const SizedBox(height: 16),
         const Text('KEA Pro', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
-        const Text('Configure Supabase in lib/app_config.dart, then restart the app.',
-          textAlign: TextAlign.center),
+        Text(message, textAlign: TextAlign.center),
       ]),
     )),
   );
 }
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.kannada, required this.onLanguageChanged});
+  const AppShell({super.key, required this.kannada, required this.onLanguageChanged, required this.themeMode, required this.onThemeModeChanged});
   final bool kannada;
   final ValueChanged<bool> onLanguageChanged;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
   @override
   State<AppShell> createState() => _AppShellState();
 }
@@ -93,6 +137,17 @@ class _AppShellState extends State<AppShell> {
       appBar: AppBar(
         title: const Text('KEA Pro', style: TextStyle(fontWeight: FontWeight.w800)),
         actions: [
+          PopupMenuButton<ThemeMode>(
+            tooltip: 'Theme',
+            initialValue: widget.themeMode,
+            onSelected: widget.onThemeModeChanged,
+            icon: const Icon(Icons.brightness_6_outlined),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: ThemeMode.system, child: Text('System theme')),
+              PopupMenuItem(value: ThemeMode.light, child: Text('Light theme')),
+              PopupMenuItem(value: ThemeMode.dark, child: Text('Dark theme')),
+            ],
+          ),
           TextButton(
             onPressed: () => widget.onLanguageChanged(!widget.kannada),
             child: Text(widget.kannada ? 'English' : 'ಕನ್ನಡ'),
@@ -144,14 +199,25 @@ class DashboardPage extends StatelessWidget {
       Text(T.s(kn,'Study modules','ಅಧ್ಯಯನ ವಿಭಾಗಗಳು'),
         style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
       const SizedBox(height: 10),
-      const Wrap(spacing: 10, runSpacing: 10, children: [
-        _ModuleCard(icon: Icons.account_balance, en: 'Polity & Governance', kn: 'ರಾಜ್ಯಶಾಸ್ತ್ರ'),
-        _ModuleCard(icon: Icons.history_edu, en: 'Karnataka History', kn: 'ಕರ್ನಾಟಕ ಇತಿಹಾಸ'),
-        _ModuleCard(icon: Icons.map, en: 'Geography', kn: 'ಭೂಗೋಳ'),
-        _ModuleCard(icon: Icons.science, en: 'Science & Tech', kn: 'ವಿಜ್ಞಾನ ಮತ್ತು ತಂತ್ರಜ್ಞಾನ'),
-        _ModuleCard(icon: Icons.eco, en: 'Environment', kn: 'ಪರಿಸರ'),
-        _ModuleCard(icon: Icons.computer, en: 'Computer Knowledge', kn: 'ಕಂಪ್ಯೂಟರ್ ಜ್ಞಾನ'),
-      ]),
+      LayoutBuilder(builder: (context, constraints) {
+        final width = (constraints.maxWidth - 12) / 2;
+        final modules = <_ModuleInfo>[
+          _ModuleInfo('polity', Icons.account_balance, 'Polity & Governance', 'ರಾಜ್ಯಶಾಸ್ತ್ರ'),
+          _ModuleInfo('karnataka-history', Icons.history_edu, 'Karnataka History', 'ಕರ್ನಾಟಕ ಇತಿಹಾಸ'),
+          _ModuleInfo('geography', Icons.map, 'Geography', 'ಭೂಗೋಳ'),
+          _ModuleInfo('science-tech', Icons.science, 'Science & Tech', 'ವಿಜ್ಞಾನ ಮತ್ತು ತಂತ್ರಜ್ಞಾನ'),
+          _ModuleInfo('environment', Icons.eco, 'Environment', 'ಪರಿಸರ'),
+          _ModuleInfo('computer-knowledge', Icons.computer, 'Computer Knowledge', 'ಕಂಪ್ಯೂಟರ್ ಜ್ಞಾನ'),
+        ];
+        return Wrap(spacing: 12, runSpacing: 12, children: modules.map((m) =>
+          SizedBox(width: width, child: _ModuleCard(
+            icon: m.icon, en: m.en, kn: m.kn,
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ModuleDetailsScreen(module: m, kannada: kn),
+            )),
+          )),
+        ).toList());
+      }),
       const SizedBox(height: 18),
       FutureBuilder<List<Map<String,dynamic>>>(
         future: Supabase.instance.client.from('current_affairs_articles')
@@ -163,20 +229,81 @@ class DashboardPage extends StatelessWidget {
   );
 }
 
+class _ModuleInfo {
+  const _ModuleInfo(this.slug, this.icon, this.en, this.kn);
+  final String slug;
+  final IconData icon;
+  final String en;
+  final String kn;
+}
+
 class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({required this.icon, required this.en, required this.kn});
-  final IconData icon; final String en; final String kn;
+  const _ModuleCard({required this.icon, required this.en, required this.kn, required this.onTap});
+  final IconData icon;
+  final String en;
+  final String kn;
+  final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => SizedBox(width: 164, child: Card(
-    child: Padding(padding: const EdgeInsets.all(14), child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, size: 28, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(height: 12),
-        Text(kn == '' ? en : en, style: const TextStyle(fontWeight: FontWeight.w600)),
-        Text(kn, style: Theme.of(context).textTheme.bodySmall),
-      ],
-    )),
-  ));
+  Widget build(BuildContext context) => Card(
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(padding: const EdgeInsets.all(14), child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(icon, size: 28, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(height: 12),
+          Text(en, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(kn, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      )),
+    ),
+  );
+}
+
+class ModuleDetailsScreen extends StatefulWidget {
+  const ModuleDetailsScreen({super.key, required this.module, required this.kannada});
+  final _ModuleInfo module;
+  final bool kannada;
+  @override
+  State<ModuleDetailsScreen> createState() => _ModuleDetailsScreenState();
+}
+
+class _ModuleDetailsScreenState extends State<ModuleDetailsScreen> {
+  late Future<List<Map<String, dynamic>>> future;
+  @override
+  void initState() { super.initState(); future = _load(); }
+  Future<List<Map<String, dynamic>>> _load() async {
+    final data = await Supabase.instance.client.from('study_materials')
+      .select('id,category_slug,title_en,title_kn,content_en,content_kn,source_url,updated_at')
+      .eq('category_slug', widget.module.slug)
+      .eq('is_published', true)
+      .order('updated_at', ascending: false)
+      .limit(100);
+    return List<Map<String, dynamic>>.from(data);
+  }
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(widget.kannada ? widget.module.kn : widget.module.en)),
+    body: FutureBuilder<List<Map<String, dynamic>>>(
+      future: future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        if (snap.hasError) return Center(child: Padding(padding: const EdgeInsets.all(20), child: Text('Could not load study material. Check the study_materials table and its read policy.\n${snap.error}')));
+        final rows = snap.data ?? [];
+        if (rows.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No published study material is available in this module yet.')));
+        return ListView.builder(itemCount: rows.length, padding: const EdgeInsets.all(12), itemBuilder: (context, i) {
+          final r = rows[i];
+          final title = (widget.kannada ? r['title_kn'] : r['title_en'])?.toString();
+          final body = (widget.kannada ? r['content_kn'] : r['content_en'])?.toString();
+          return Card(child: ExpansionTile(
+            title: Text((title == null || title.isEmpty) ? 'Study note' : title),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [Align(alignment: Alignment.centerLeft, child: SelectableText(body ?? ''))],
+          ));
+        });
+      },
+    ),
+  );
 }
 
 class _NewsPreview extends StatelessWidget {
@@ -209,7 +336,7 @@ class NewsPage extends StatefulWidget {
 }
 class _NewsPageState extends State<NewsPage> {
   final search = TextEditingController();
-  String region = 'all';
+  String region = 'karnataka';
   bool loading = false;
   List<Map<String,dynamic>> rows = [];
   String? error;
@@ -419,8 +546,8 @@ class _BookmarksPageState extends State<BookmarksPage>{
       if(rows.isEmpty)return const _ErrorCard(message:'No saved articles yet. Sign in and bookmark a current-affairs article.');
       return ListView.builder(itemCount:rows.length,itemBuilder:(context,i){
         final r=rows[i];final article=r['current_affairs_articles'] as Map<String,dynamic>?;
-        return ListTile(title: Text((widget.kn ? (article?['title_kn'] ?? article?['title']) : article?['title'])?.toString() ?? 'Saved item'),
-          subtitle: Text((widget.kn ? (article?['summary_kn'] ?? article?['summary_en']) : article?['summary_en'])?.toString() ?? ''),
+        return ListTile(title:Text((widget.kn?article?['title_kn']:article?['title'])?.toString()??'Saved item'),
+          subtitle:Text((widget.kn?article?['summary_kn']:article?['summary_en'])?.toString()??''),
           trailing:IconButton(icon:const Icon(Icons.delete_outline),onPressed:()async{
             await Supabase.instance.client.from('user_bookmarks').delete().eq('id',r['id']);
             if(context.mounted)setState((){});
